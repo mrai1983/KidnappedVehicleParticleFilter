@@ -36,17 +36,17 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
 	double std_y = std[1];
 	double std_theta = std[2];
 
-	normal_distribution<double> dist_x(0, std_x);
-	normal_distribution<double> dist_y(0, std_y);
-	normal_distribution<double> dist_theta(0, std_theta);
+	normal_distribution<double> dist_x(x, std_x);
+	normal_distribution<double> dist_y(y, std_y);
+	normal_distribution<double> dist_theta(theta, std_theta);
 
 	for (int i = 0; i < num_particles; i++)
 	{
 		Particle particle;
 		particle.id = i;
-		particle.x = x + dist_x(gen);
-		particle.y = y + dist_y(gen);
-		particle.theta = theta + dist_theta(gen);
+		particle.x = dist_x(gen);
+		particle.y = dist_y(gen);
+		particle.theta = dist_theta(gen);
 		particle.weight = 1.0;
 		particles.push_back(particle);
 	}
@@ -72,10 +72,9 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
 
 	default_random_engine gen;
 
-	normal_distribution<double> dist_x(0, std_x);
+	/*normal_distribution<double> dist_x(0, std_x);
 	normal_distribution<double> dist_y(0, std_y);
-	normal_distribution<double> dist_theta(0, std_theta);
-
+	normal_distribution<double> dist_theta(0, std_theta);*/
 
 	for (int i = 0; i < particles.size(); i++)
 	{
@@ -83,6 +82,7 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
 
 		x = particle.x;
 		y = particle.y;
+
 		theta = particle.theta;
 
 		if (fabs(yaw_rate) > 0.00001)
@@ -95,40 +95,21 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
 		{
 			xf = x + velocity * delta_t * cos(theta);
 			yf = y + velocity * delta_t * sin(theta);
+			thetaf = theta;
 		}
+
+
+		normal_distribution<double> dist_x(xf, std_x);
+		normal_distribution<double> dist_y(yf, std_y);
+		normal_distribution<double> dist_theta(thetaf,std_theta);
 
 		//Add noise
-		particle.x = xf + dist_x(gen);
-		particle.y = yf + dist_y(gen);
+		particle.x = dist_x(gen);
+		particle.y = dist_y(gen);
 
-		particle.theta = thetaf + dist_theta(gen);
+		particle.theta = dist_theta(gen);
 	}
 
-
-}
-
-void ParticleFilter::dataAssociation(std::vector<LandmarkObs> predicted, std::vector<LandmarkObs>& observations) {
-	// TODO: Find the predicted measurement that is closest to each observed measurement and assign the 
-	//   observed measurement to this particular landmark.
-	// NOTE: this method will NOT be called by the grading code. But you will probably find it useful to 
-	//   implement this method and use it as a helper during the updateWeights phase.
-
-	for (int i = 0; i < observations.size(); i++)
-	{
-		double minDist = numeric_limits<double>::max();
-
-		for (int j= 0; j < predicted.size(); j++)
-		{
-			double distance = dist(	observations[i].x, observations[i].y,
-									predicted[j].x, predicted[j].y);
-
-			if (distance < minDist)
-			{
-				observations[i].id = predicted[j].id;
-				minDist = distance;
-			}
-		}
-	}
 
 }
 
@@ -145,67 +126,53 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
 	//   3.33
 	//   http://planning.cs.uiuc.edu/node99.html
 
+	vector<Map::single_landmark_s> validLandmarks;
 
 	weights.clear();
+
+
 
 	for (int i = 0; i < particles.size(); i++)
 	{
 		Particle& particle = particles.at(i);
-
-		vector<LandmarkObs> validLandmarks;
+		particle.associations.clear();
+		particle.sense_x.clear();
+		particle.sense_y.clear();
+		validLandmarks.clear();
 
 		//Iterate through all the landmarks
 		for (int k = 0; k < map_landmarks.landmark_list.size(); k++)
 		{
 			const Map::single_landmark_s& landMark = map_landmarks.landmark_list[k];
 
-			//if ((fabs(particle.x - landMark.x_f) <= sensor_range) &&
-			//		(fabs(particle.y - landMark.y_f) <= sensor_range))
-
 			if (dist(particle.x, particle.y, landMark.x_f, landMark.y_f) <= sensor_range)
 			{
+				validLandmarks.push_back(landMark);
 
-				validLandmarks.push_back(LandmarkObs{landMark.id_i, landMark.x_f, landMark.y_f});
+				LandmarkObs nLandMark = getNearestObservationForLandmark(particle, landMark, observations);
+
+				particle.associations.push_back(landMark.id_i);
+				particle.sense_x.push_back(nLandMark.x);
+				particle.sense_y.push_back(nLandMark.y);
 			}
 		}
-
-
-		vector<LandmarkObs> transObs;
-
-		for (int k = 0; k < observations.size(); k++)
-		{
-		      double tx = cos(particle.theta)*observations[k].x - sin(particle.theta)*observations[k].y + particle.x;
-		      double ty = sin(particle.theta)*observations[k].x + cos(particle.theta)*observations[k].y + particle.y;
-		      transObs.push_back(LandmarkObs{observations[k].id, tx, ty});
-		}
-
-		dataAssociation(validLandmarks, transObs);
 
 		particle.weight = 1.0;
 
-		for (int k = 0; k < transObs.size(); k++)
+		for (int k = 0; k < validLandmarks.size(); k++)
 		{
-			double x = transObs[k].x;
-			double y = transObs[k].y;
-			double ux = 0.0;
-			double uy = 0.0;
+
+			double x = particle.sense_x[k];
+			double y = particle.sense_y[k];
+
 			double stdx = std_landmark[0];
 			double stdy = std_landmark[1];
 
-			//Get associate landMark
-			for (int j = 0; j < validLandmarks.size();j++)
-			{
-				if (transObs[k].id == validLandmarks[j].id)
-				{
-					ux = validLandmarks[j].x;
-					uy = validLandmarks[j].y;
-					break;
-				}
-			}
+			double ux = validLandmarks[k].x_f;
+			double uy = validLandmarks[k].y_f;
 
-			double obsW = ( 1/(2* M_PI * stdx * stdy)) * exp( -( pow(x-ux,2)/(2*pow(stdx, 2)) + (pow(y-uy,2)/(2*pow(stdy, 2)))));
+			particle.weight *= ( 1/(2* M_PI * stdx * stdy)) * exp( -( pow(x-ux,2)/(2*pow(stdx, 2)) + (pow(y-uy,2)/(2*pow(stdy, 2)))));
 
-			particle.weight *= obsW;
 		}
 
 		weights.push_back(particle.weight);
@@ -252,25 +219,6 @@ void ParticleFilter::resample() {
 
 }
 
-Particle ParticleFilter::SetAssociations(Particle particle, std::vector<int> associations, std::vector<double> sense_x, std::vector<double> sense_y)
-{
-	//particle: the particle to assign each listed association, and association's (x,y) world coordinates mapping to
-	// associations: The landmark id that goes along with each listed association
-	// sense_x: the associations x mapping already converted to world coordinates
-	// sense_y: the associations y mapping already converted to world coordinates
-
-	//Clear the previous associations
-	particle.associations.clear();
-	particle.sense_x.clear();
-	particle.sense_y.clear();
-
-	particle.associations= associations;
- 	particle.sense_x = sense_x;
- 	particle.sense_y = sense_y;
-
- 	return particle;
-}
-
 string ParticleFilter::getAssociations(Particle best)
 {
 	vector<int> v = best.associations;
@@ -308,9 +256,8 @@ void ParticleFilter::getMapCoordinates(const Particle& particle, const double xc
 
 LandmarkObs ParticleFilter::getNearestObservationForLandmark(const Particle& particle, const Map::single_landmark_s& landMark, const std::vector<LandmarkObs>& landmarkObs)
 {
-	double 		minDistance = 0.0;
+	double 		minDistance = numeric_limits<double>::max();
 	LandmarkObs selectedObs = landmarkObs[0];
-
 
 	assert (landmarkObs.size() != 0);
 
@@ -325,18 +272,7 @@ LandmarkObs ParticleFilter::getNearestObservationForLandmark(const Particle& par
 
 		distance = dist(xm, ym, landMark.x_f, landMark.y_f);
 
-		//cout << "minDistance: " << minDistance << " distance: " << distance <<endl;
-
-		if (j == 0)
-		{
-			minDistance = distance;
-			selectedObs.id = landmarkObs[j].id;
-			selectedObs.x = xm;
-			selectedObs.y = ym;
-			continue;
-		}
-
-		if (minDistance > distance)
+		if (distance < minDistance)
 		{
 			minDistance = distance;
 			selectedObs.id = landmarkObs[j].id;
