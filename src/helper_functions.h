@@ -13,7 +13,7 @@
 #include <math.h>
 #include <vector>
 #include "map.h"
-
+#include "particle_filter.h"
 /*
  * Struct representing one position/control measurement.
  */
@@ -235,5 +235,27 @@ inline bool read_landmark_data(std::string filename, std::vector<LandmarkObs>& o
 	}
 	return true;
 }
+
+
+inline double multivariateGaussian(const double x, const double y, const double stdx, const double stdy, const double ux, const double uy)
+{
+	double denominator = 1/(2 * M_PI * stdx * stdy);
+
+	double a = pow ((x - ux),2)/(2 * stdx * stdx);
+
+	double b = pow ((y - uy),2)/(2 * stdy * stdy);
+
+	double c = exp (-1 * (a + b));
+
+	double d = c * denominator;
+
+	d = ( 1/(2*M_PI*stdx*stdy)) * exp( -( pow(x-ux,2)/(2*pow(stdx, 2)) + (pow(y-uy,2)/(2*pow(stdy, 2))) ) );
+
+	return d;
+
+}
+
+
+
 
 #endif /* HELPER_FUNCTIONS_H_ */

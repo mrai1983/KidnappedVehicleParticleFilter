@@ -10,6 +10,7 @@
 #define PARTICLE_FILTER_H_
 
 #include "helper_functions.h"
+#include <map>
 
 struct Particle {
 
@@ -21,6 +22,41 @@ struct Particle {
 	std::vector<int> associations;
 	std::vector<double> sense_x;
 	std::vector<double> sense_y;
+
+	Particle()
+	{
+		id = 0;
+		x = 0.0;
+		y = 0.0;
+		theta = 0.0;
+		weight = 1;
+	}
+
+	Particle(const Particle& p)
+	{
+		id = p.id;
+		x = p.x;
+		y = p.y;
+		theta = p.theta;
+		weight = p.weight;
+
+		associations = p.associations;
+		sense_x = p.sense_x;
+		sense_y = p.sense_y;
+	}
+
+	Particle operator=(const Particle& p)
+	{
+		id = p.id;
+		x = p.x;
+		y = p.y;
+		theta = p.theta;
+		weight = p.weight;
+
+		associations = p.associations;
+		sense_x = p.sense_x;
+		sense_y = p.sense_y;
+	}
 };
 
 
@@ -38,6 +74,8 @@ class ParticleFilter {
 	// Vector of weights of all particles
 	std::vector<double> weights;
 	
+	std::map<double, int> weightToParticleIdMap;
+
 public:
 	
 	// Set of current particles
@@ -113,6 +151,17 @@ public:
 	const bool initialized() const {
 		return is_initialized;
 	}
+
+
+	void getMapCoordinates(const Particle& particle, const double xc, const double yc, double& xm, double& ym);
+	LandmarkObs getNearestObservationForLandmark(const Particle& particle,
+			const Map::single_landmark_s& landMark, const std::vector<LandmarkObs>& landmarkObs);
+	const Map::single_landmark_s get_landmark_from_id(int id, const Map& mapLandmarks);
+
+
+	Particle getParticle(int particleId);
+
+
 };
 
 
